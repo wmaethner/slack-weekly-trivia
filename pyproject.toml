@@ -1,0 +1,17 @@
+[project]
+name = "slack-weekly-trivia"
+version = "0.1.0"
+description = "Slack app for weekly trivia events"
+requires-python = ">=3.10"
+dependencies = [
+    "slack-bolt>=1.28.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.28.0",
+]
+
+[project.scripts]
+trivia = "src.app:main"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
