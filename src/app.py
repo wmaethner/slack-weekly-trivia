@@ -75,7 +75,7 @@ def handle_trivia_command(ack, command, client, respond, logger):
     logger.info(f"/trivia from user={user} channel={channel}")
 
     try:
-        blocks = trivia_service.create_question(user)
+        blocks = trivia_service.create_question(user, channel)
         client.chat_postEphemeral(
             channel=channel,
             user=user,

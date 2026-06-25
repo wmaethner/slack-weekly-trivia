@@ -34,6 +34,15 @@ class StatsStore:
             )
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS asked_questions (
+                channel_id  TEXT NOT NULL,
+                question_id TEXT NOT NULL,
+                UNIQUE(channel_id, question_id)
+            )
+            """
+        )
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -65,9 +74,27 @@ class StatsStore:
         )
         self._conn.commit()
 
+    def record_asked(self, channel_id, question_id):
+        """Mark a question as having been asked in a channel."""
+        self._conn.execute(
+            "INSERT OR IGNORE INTO asked_questions (channel_id, question_id) "
+            "VALUES (?, ?)",
+            (channel_id, question_id),
+        )
+        self._conn.commit()
+
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
+
+    def has_asked(self, channel_id, question_id):
+        """Check if a question has already been asked in a channel."""
+        row = self._conn.execute(
+            "SELECT 1 FROM asked_questions "
+            "WHERE channel_id = ? AND question_id = ?",
+            (channel_id, question_id),
+        ).fetchone()
+        return row is not None
 
     def get_user_stats(self, user_id):
         row = self._conn.execute(

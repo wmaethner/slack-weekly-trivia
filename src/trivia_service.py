@@ -23,9 +23,15 @@ class TriviaService:
         self.stats = stats_store
         self._active = {}
 
-    def create_question(self, user_id):
+    def create_question(self, user_id, channel_id):
         """Fetch a question, store state, and return Slack blocks."""
-        q = self.api.fetch_question()
+        max_attempts = 5
+        for _ in range(max_attempts):
+            q = self.api.fetch_question()
+            if not self.stats.has_asked(channel_id, q["id"]):
+                break
+
+        self.stats.record_asked(channel_id, q["id"])
 
         answers = [q["correctAnswer"]] + q["incorrectAnswers"]
         random.shuffle(answers)
