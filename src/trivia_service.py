@@ -18,8 +18,9 @@ LABELS = ["A", "B", "C", "D", "E"]
 class TriviaService:
     """Core trivia game logic. Decoupled from Slack and API details."""
 
-    def __init__(self, trivia_api):
+    def __init__(self, trivia_api, stats_store):
         self.api = trivia_api
+        self.stats = stats_store
         self._active = {}
 
     def create_question(self, user_id):
@@ -32,6 +33,7 @@ class TriviaService:
         labels = LABELS[: len(answers)]
 
         state = {
+            "question_id": q["id"],
             "correct_label": labels[correct_index],
             "correct_answer": q["correctAnswer"],
             "answers": answers,
@@ -45,11 +47,35 @@ class TriviaService:
         return self._build_question_blocks(state)
 
     def check_answer(self, user_id, selected_label):
-        """Check the user's answer and return result Slack blocks."""
+        """Check the user's answer, record stats, and return result blocks."""
         state = self._active.pop(user_id, None)
         if state is None:
             return None
+
+        is_correct = selected_label == state["correct_label"]
+        self.stats.record_answer(
+            user_id=user_id,
+            question_id=state["question_id"],
+            category=state["category"],
+            difficulty=state["difficulty"],
+            correct=is_correct,
+            selected=selected_label,
+        )
+
         return self._build_result_blocks(state, selected_label)
+
+    def get_user_stats(self, user_id):
+        """Return stats summary for a user."""
+        return self.stats.get_user_stats(user_id)
+
+    def get_leaderboard(self, limit=3, category=None, difficulty=None):
+        return self.stats.get_leaderboard(limit, category, difficulty)
+
+    def get_active_categories(self):
+        return self.stats.get_active_categories()
+
+    def get_active_difficulties(self):
+        return self.stats.get_active_difficulties()
 
     # ------------------------------------------------------------------
     # Block builders

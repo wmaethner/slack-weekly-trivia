@@ -1,0 +1,169 @@
+import os
+import sqlite3
+from datetime import datetime, timezone
+
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+os.makedirs(_DATA_DIR, exist_ok=True)
+
+
+class StatsStore:
+    """SQLite-backed persistence for trivia answer stats."""
+
+    def __init__(self, db_path=None):
+        if db_path is None:
+            db_path = os.path.join(_DATA_DIR, "trivia_stats.db")
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._migrate()
+
+    # ------------------------------------------------------------------
+    # Schema
+    # ------------------------------------------------------------------
+
+    def _migrate(self):
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS answers (
+                user_id     TEXT NOT NULL,
+                question_id TEXT NOT NULL,
+                category    TEXT NOT NULL,
+                difficulty  TEXT NOT NULL,
+                correct     INTEGER NOT NULL,
+                selected    TEXT NOT NULL,
+                timestamp   TEXT NOT NULL,
+                UNIQUE(user_id, question_id)
+            )
+            """
+        )
+        self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Write
+    # ------------------------------------------------------------------
+
+    def record_answer(
+        self,
+        user_id,
+        question_id,
+        category,
+        difficulty,
+        correct,
+        selected,
+        timestamp=None,
+    ):
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc).isoformat()
+
+        self._conn.execute(
+            """
+            INSERT OR IGNORE INTO answers
+                (user_id, question_id, category, difficulty,
+                 correct, selected, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, question_id, category, difficulty,
+             int(correct), selected, timestamp),
+        )
+        self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Read
+    # ------------------------------------------------------------------
+
+    def get_user_stats(self, user_id):
+        row = self._conn.execute(
+            """
+            SELECT COUNT(*), SUM(correct)
+            FROM answers
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+
+        total = row[0]
+        correct = row[1] or 0
+        accuracy = round(correct / total * 100, 1) if total else 0
+
+        by_category = self._group_by(user_id, "category")
+        by_difficulty = self._group_by(user_id, "difficulty")
+
+        return {
+            "total": total,
+            "correct": correct,
+            "accuracy": accuracy,
+            "by_category": by_category,
+            "by_difficulty": by_difficulty,
+        }
+
+    def get_leaderboard(self, limit=3, category=None, difficulty=None):
+        where = []
+        params = []
+
+        if category:
+            where.append("category = ?")
+            params.append(category)
+        if difficulty:
+            where.append("difficulty = ?")
+            params.append(difficulty)
+
+        clause = ""
+        if where:
+            clause = "WHERE " + " AND ".join(where)
+
+        rows = self._conn.execute(
+            f"""
+            SELECT user_id, COUNT(*) AS total, SUM(correct) AS correct
+            FROM answers
+            {clause}
+            GROUP BY user_id
+            ORDER BY CAST(SUM(correct) AS REAL) / COUNT(*) DESC, SUM(correct) DESC
+            LIMIT ?
+            """,
+            (*params, limit),
+        ).fetchall()
+
+        return [
+            {
+                "user_id": r[0],
+                "total": r[1],
+                "correct": r[2] or 0,
+                "accuracy": round(r[2] / r[1] * 100, 1) if r[1] else 0,
+            }
+            for r in rows
+        ]
+
+    def get_active_categories(self):
+        rows = self._conn.execute(
+            "SELECT DISTINCT category FROM answers ORDER BY category"
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def get_active_difficulties(self):
+        rows = self._conn.execute(
+            "SELECT DISTINCT difficulty FROM answers ORDER BY difficulty"
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def _group_by(self, user_id, column):
+        rows = self._conn.execute(
+            f"""
+            SELECT {column}, COUNT(*), SUM(correct)
+            FROM answers
+            WHERE user_id = ?
+            GROUP BY {column}
+            ORDER BY COUNT(*) DESC
+            """,
+            (user_id,),
+        ).fetchall()
+
+        result = {}
+        for key, total, correct in rows:
+            c = correct or 0
+            result[key] = {
+                "total": total,
+                "correct": c,
+                "accuracy": round(c / total * 100, 1) if total else 0,
+            }
+        return result
+
+    def close(self):
+        self._conn.close()
