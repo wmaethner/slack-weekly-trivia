@@ -22,6 +22,8 @@ class TriviaService:
         self.api = trivia_api
         self.stats = stats_store
         self._active = {}
+        self._posted = {}
+        self._posted_answers = {}  # (question_id, user_id) → True
 
     def create_question(self, user_id, channel_id):
         """Fetch a question, store state, and return Slack blocks."""
@@ -84,10 +86,90 @@ class TriviaService:
         return self.stats.get_active_difficulties()
 
     # ------------------------------------------------------------------
+    # Posted questions (shared, multi-answerer)
+    # ------------------------------------------------------------------
+
+    def create_posted_question(self, channel_id):
+        """Fetch a question and return public channel blocks + question_id."""
+        max_attempts = 5
+        for _ in range(max_attempts):
+            q = self.api.fetch_question()
+            if not self.stats.has_asked(channel_id, q["id"]):
+                break
+
+        self.stats.record_asked(channel_id, q["id"])
+
+        answers = [q["correctAnswer"]] + q["incorrectAnswers"]
+        random.shuffle(answers)
+        correct_index = answers.index(q["correctAnswer"])
+        labels = LABELS[: len(answers)]
+
+        state = {
+            "question_id": q["id"],
+            "correct_label": labels[correct_index],
+            "correct_answer": q["correctAnswer"],
+            "answers": answers,
+            "labels": labels,
+            "question_text": q["question"]["text"],
+            "category": q["category"],
+            "difficulty": q.get("difficulty", "medium"),
+        }
+        self._posted[q["id"]] = state
+
+        public_blocks = self._build_public_question_blocks(state)
+        return public_blocks, q["id"]
+
+    def get_answer_blocks(self, question_id):
+        """Return ephemeral answer blocks for a posted question."""
+        state = self._posted.get(question_id)
+        if state is None:
+            return None
+        return self._build_question_blocks(state, "posted_trivia_answer_")
+
+    def check_posted_answer(self, question_id, user_id, selected_label):
+        """Check a posted answer, prevent double-answers, record stats."""
+        state = self._posted.get(question_id)
+        if state is None:
+            return None
+
+        key = (question_id, user_id)
+        if key in self._posted_answers:
+            return None  # already answered
+
+        self._posted_answers[key] = True
+        is_correct = selected_label == state["correct_label"]
+        self.stats.record_answer(
+            user_id=user_id,
+            question_id=state["question_id"],
+            category=state["category"],
+            difficulty=state["difficulty"],
+            correct=is_correct,
+            selected=selected_label,
+        )
+
+        return self._build_result_blocks(state, selected_label)
+
+    # ------------------------------------------------------------------
+    # Workspace config passthroughs
+    # ------------------------------------------------------------------
+
+    def set_channel_config(self, team_id, channel_id):
+        self.stats.set_channel_config(team_id, channel_id)
+
+    def get_channel_config(self, team_id):
+        return self.stats.get_channel_config(team_id)
+
+    def set_post_time(self, team_id, post_time):
+        self.stats.set_post_time(team_id, post_time)
+
+    def get_all_configs(self):
+        return self.stats.get_all_configs()
+
+    # ------------------------------------------------------------------
     # Block builders
     # ------------------------------------------------------------------
 
-    def _build_question_blocks(self, state):
+    def _build_question_blocks(self, state, action_prefix="trivia_answer_"):
         emoji = CATEGORY_EMOJI.get(state["category"], ":grey_question:")
         category_title = state["category"].replace("_", " ").title()
 
@@ -110,6 +192,10 @@ class TriviaService:
         ]
 
         for label, answer in zip(state["labels"], state["answers"]):
+            value = label
+            if action_prefix != "trivia_answer_":
+                value = f"{label}|{state['question_id']}"
+
             blocks.append(
                 {
                     "type": "actions",
@@ -121,8 +207,8 @@ class TriviaService:
                                 "emoji": True,
                                 "text": f"{label}. {answer}",
                             },
-                            "action_id": f"trivia_answer_{label.lower()}",
-                            "value": label,
+                            "action_id": f"{action_prefix}{label.lower()}",
+                            "value": value,
                         }
                     ],
                 }
@@ -209,3 +295,54 @@ class TriviaService:
         )
 
         return blocks
+
+    def _build_public_question_blocks(self, state):
+        """Public channel message with 'Answer' button."""
+        emoji = CATEGORY_EMOJI.get(state["category"], ":grey_question:")
+        category_title = state["category"].replace("_", " ").title()
+
+        return [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": ":trophy:  Daily Trivia",
+                    "emoji": True,
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*{state['question_text']}*",
+                },
+            },
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {
+                            "type": "plain_text",
+                            "text": "Answer",
+                            "emoji": True,
+                        },
+                        "action_id": "start_answer",
+                        "value": state["question_id"],
+                    }
+                ],
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": (
+                            f"{emoji}  {category_title}"
+                            f"  •  Difficulty: {state['difficulty']}"
+                            f"  •  Click *Answer* to submit yours privately"
+                        ),
+                    }
+                ],
+            },
+        ]

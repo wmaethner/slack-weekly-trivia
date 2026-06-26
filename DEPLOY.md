@@ -73,7 +73,7 @@ CMD ["python", "src/app.py"]
 **`fly.toml`**
 
 ```toml
-app = "slack-weekly-trivia"
+app = "slack-daily-trivia"
 primary_region = "iad"
 
 [build]
@@ -109,7 +109,7 @@ src/data/
 
 ```bash
 # Create app
-fly apps create slack-weekly-trivia
+fly apps create slack-daily-trivia
 
 # Create persistent volume (1 GB)
 fly volumes create trivia_data --region iad --size 1
@@ -167,7 +167,7 @@ fly deploy
 ```bash
 # If the new image is broken, Fly auto-rolls back (auto_rollback = true).
 # To manually deploy a previous image:
-fly deploy --image registry.fly.io/slack-weekly-trivia:deployment-<id>
+fly deploy --image registry.fly.io/slack-daily-trivia:deployment-<id>
 ```
 
 ---
@@ -280,7 +280,7 @@ fly volumes snapshots list <name>    # list snapshots
 fly status                           # app health
 fly status --all                     # all machines
 fly ssh console                      # shell into running VM
-fly apps restart slack-weekly-trivia # bounce the app
+fly apps restart slack-daily-trivia # bounce the app
 fly apps list                        # list all apps
 fly orgs list                        # list orgs
 ```

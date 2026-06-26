@@ -43,6 +43,15 @@ class StatsStore:
             )
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workspace_configs (
+                team_id    TEXT PRIMARY KEY,
+                channel_id TEXT NOT NULL,
+                post_time  TEXT NOT NULL DEFAULT '09:00'
+            )
+            """
+        )
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -191,6 +200,46 @@ class StatsStore:
                 "accuracy": round(c / total * 100, 1) if total else 0,
             }
         return result
+
+    # ------------------------------------------------------------------
+    # Workspace config
+    # ------------------------------------------------------------------
+
+    def set_channel_config(self, team_id, channel_id):
+        self._conn.execute(
+            "INSERT INTO workspace_configs (team_id, channel_id) "
+            "VALUES (?, ?) "
+            "ON CONFLICT(team_id) DO UPDATE SET channel_id = excluded.channel_id",
+            (team_id, channel_id),
+        )
+        self._conn.commit()
+
+    def get_channel_config(self, team_id):
+        row = self._conn.execute(
+            "SELECT channel_id, post_time FROM workspace_configs WHERE team_id = ?",
+            (team_id,),
+        ).fetchone()
+        if row is None:
+            return None, None
+        return row[0], row[1]
+
+    def set_post_time(self, team_id, post_time):
+        self._conn.execute(
+            "INSERT INTO workspace_configs (team_id, channel_id, post_time) "
+            "VALUES (?, '', ?) "
+            "ON CONFLICT(team_id) DO UPDATE SET post_time = excluded.post_time",
+            (team_id, post_time),
+        )
+        self._conn.commit()
+
+    def get_all_configs(self):
+        rows = self._conn.execute(
+            "SELECT team_id, channel_id, post_time FROM workspace_configs"
+        ).fetchall()
+        return [
+            {"team_id": r[0], "channel_id": r[1], "post_time": r[2]}
+            for r in rows
+        ]
 
     def close(self):
         self._conn.close()

@@ -11,6 +11,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from trivia_api import TriviaApi
 from trivia_service import CATEGORY_EMOJI, TriviaService
 from stats_store import StatsStore
+from scheduler import DailyTriviaScheduler
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -196,6 +197,78 @@ def handle_leaderboard_command(ack, command, client, respond, logger):
     )
 
 
+@app.command("/post-trivia")
+def handle_post_trivia_command(ack, command, client, respond, logger):
+    ack()
+
+    channel = command["channel_id"]
+    user = command["user_id"]
+    logger.info(f"/post-trivia from user={user} channel={channel}")
+
+    try:
+        public_blocks, _ = trivia_service.create_posted_question(channel)
+        client.chat_postMessage(
+            channel=channel,
+            text="Daily Trivia",
+            blocks=public_blocks,
+        )
+    except Exception as e:
+        logger.error(f"Failed to post trivia: {e}", exc_info=True)
+        respond("Something went wrong. Try again.")
+
+
+@app.command("/set-trivia-channel")
+def handle_set_channel_command(ack, command, client, logger):
+    ack()
+
+    channel = command["channel_id"]
+    team = command["team_id"]
+    user = command["user_id"]
+    logger.info(f"/set-trivia-channel from user={user}")
+
+    trivia_service.set_channel_config(team, channel)
+    client.chat_postEphemeral(
+        channel=channel,
+        user=user,
+        text=f"Daily trivia set to post in <#{channel}>",
+    )
+
+
+@app.command("/set-trivia-time")
+def handle_set_time_command(ack, command, client, respond, logger):
+    ack()
+
+    channel = command["channel_id"]
+    team = command["team_id"]
+    user = command["user_id"]
+    text = command.get("text", "").strip()
+    logger.info(f"/set-trivia-time from user={user} text={text}")
+
+    if not text:
+        respond("Usage: `/set-trivia-time HH:MM` (UTC, 24-hour). Example: `/set-trivia-time 14:00`")
+        return
+
+    try:
+        # Validate format
+        parts = text.split(":")
+        if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+            raise ValueError
+        hour, minute = int(parts[0]), int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError
+    except ValueError:
+        respond("Invalid time format. Use HH:MM (UTC, 24-hour). Example: `/set-trivia-time 14:00`")
+        return
+
+    post_time = f"{hour:02d}:{minute:02d}"
+    trivia_service.set_post_time(team, post_time)
+    client.chat_postEphemeral(
+        channel=channel,
+        user=user,
+        text=f"Daily trivia post time set to {post_time} UTC",
+    )
+
+
 # ------------------------------------------------------------------
 # Actions
 # ------------------------------------------------------------------
@@ -375,6 +448,66 @@ def _build_leaderboard_blocks(user, category, difficulty):
     return blocks
 
 
+@app.action("start_answer")
+def handle_start_answer(ack, body, client, logger):
+    ack()
+
+    user = body["user"]["id"]
+    channel = body["channel"]["id"]
+    question_id = body["actions"][0]["value"]
+    logger.info(f"start_answer user={user} qid={question_id}")
+
+    blocks = trivia_service.get_answer_blocks(question_id)
+    if blocks is None:
+        client.chat_postEphemeral(
+            channel=channel,
+            user=user,
+            text="This question has expired. Wait for the next daily trivia!",
+        )
+        return
+
+    client.chat_postEphemeral(
+        channel=channel,
+        user=user,
+        text="Trivia Question",
+        blocks=blocks,
+    )
+
+
+@app.action(re.compile(r"posted_trivia_answer_.*"))
+def handle_posted_trivia_answer(ack, body, logger):
+    ack()
+
+    user = body["user"]["id"]
+    raw_value = body["actions"][0]["value"]
+    parts = raw_value.split("|", 1)
+    selected_label = parts[0]
+    question_id = parts[1] if len(parts) > 1 else None
+
+    result_blocks = trivia_service.check_posted_answer(
+        question_id, user, selected_label
+    )
+    if result_blocks is None:
+        requests.post(
+            body["response_url"],
+            json={
+                "replace_original": "true",
+                "text": "You already answered this one! :white_check_mark:",
+            },
+            timeout=10,
+        )
+        return
+
+    requests.post(
+        body["response_url"],
+        json={"replace_original": "true", "blocks": result_blocks},
+        timeout=10,
+    )
+    logger.info(
+        f"Posted answer: user={user} label={selected_label} qid={question_id}"
+    )
+
+
 @app.action(re.compile(r"trivia_answer_.*"))
 def handle_trivia_answer(ack, body, logger):
     ack()
@@ -407,6 +540,9 @@ def main():
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
+
+    scheduler = DailyTriviaScheduler(trivia_service, app.client)
+    scheduler.start()
 
     handler = SocketModeHandler(app, app_token)
     handler.start()

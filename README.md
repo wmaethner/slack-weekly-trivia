@@ -1,6 +1,6 @@
-# slack-weekly-trivia
+# slack-daily-trivia
 
-Slack app for weekly trivia events.
+Slack app for daily trivia events.
 
 ## Setup
 
@@ -11,6 +11,6 @@ Slack app for weekly trivia events.
 
 ## Features
 
-- Weekly trivia scheduling
+- Daily trivia scheduling
 - Question delivery
 - Score tracking

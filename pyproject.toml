@@ -1,7 +1,7 @@
 [project]
-name = "slack-weekly-trivia"
+name = "slack-daily-trivia"
 version = "0.1.0"
-description = "Slack app for weekly trivia events"
+description = "Slack app for daily trivia events"
 requires-python = ">=3.10"
 dependencies = [
     "slack-bolt>=1.28.0",
