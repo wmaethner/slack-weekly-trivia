@@ -7,6 +7,7 @@ import requests
 from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
+from slack_sdk.errors import SlackApiError
 
 from trivia_api import TriviaApi
 from trivia_service import CATEGORY_EMOJI, TriviaService
@@ -65,28 +66,6 @@ def handle_message(event, client, logger):
 # ------------------------------------------------------------------
 # Commands
 # ------------------------------------------------------------------
-
-
-@app.command("/trivia")
-def handle_trivia_command(ack, command, client, respond, logger):
-    ack()
-
-    channel = command["channel_id"]
-    user = command["user_id"]
-    logger.info(f"/trivia from user={user} channel={channel}")
-
-    try:
-        blocks = trivia_service.create_question(user, channel)
-        client.chat_postEphemeral(
-            channel=channel,
-            user=user,
-            text="Trivia Question",
-            blocks=blocks,
-        )
-        logger.info(f"Trivia question sent to user={user}")
-    except Exception as e:
-        logger.error(f"Failed: {e}", exc_info=True)
-        respond("Something went wrong. Try again.")
 
 
 @app.command("/stats")
@@ -212,6 +191,12 @@ def handle_post_trivia_command(ack, command, client, respond, logger):
             text="Daily Trivia",
             blocks=public_blocks,
         )
+    except SlackApiError as e:
+        if e.response.get("error") == "not_in_channel":
+            respond("I'm not in this channel. Add me via `/invite @YourBotName` first.")
+        else:
+            logger.error(f"Failed to post trivia: {e}", exc_info=True)
+            respond("Something went wrong. Try again.")
     except Exception as e:
         logger.error(f"Failed to post trivia: {e}", exc_info=True)
         respond("Something went wrong. Try again.")
@@ -230,7 +215,7 @@ def handle_set_channel_command(ack, command, client, logger):
     client.chat_postEphemeral(
         channel=channel,
         user=user,
-        text=f"Daily trivia set to post in <#{channel}>",
+        text=f"Daily trivia set to post in <#{channel}>. (Add me to this channel with `/invite @YourBotName`)",
     )
 
 
@@ -506,25 +491,6 @@ def handle_posted_trivia_answer(ack, body, logger):
     logger.info(
         f"Posted answer: user={user} label={selected_label} qid={question_id}"
     )
-
-
-@app.action(re.compile(r"trivia_answer_.*"))
-def handle_trivia_answer(ack, body, logger):
-    ack()
-
-    user = body["user"]["id"]
-    selected_label = body["actions"][0]["value"]
-
-    result_blocks = trivia_service.check_answer(user, selected_label)
-    if result_blocks is None:
-        return
-
-    requests.post(
-        body["response_url"],
-        json={"replace_original": "true", "blocks": result_blocks},
-        timeout=10,
-    )
-    logger.info(f"Answer processed: user={user} label={selected_label}")
 
 
 # ------------------------------------------------------------------

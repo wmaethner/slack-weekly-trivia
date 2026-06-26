@@ -2,6 +2,7 @@ import logging
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from slack_sdk.errors import SlackApiError
 
 
 class DailyTriviaScheduler:
@@ -83,6 +84,15 @@ class DailyTriviaScheduler:
             logging.info(
                 "Scheduler: posted daily trivia to %s (team=%s)", channel_id, team_id
             )
+        except SlackApiError as e:
+            if e.response.get("error") == "not_in_channel":
+                logging.warning(
+                    "Scheduler: bot not in channel %s — add with /invite", channel_id
+                )
+            else:
+                logging.exception(
+                    "Scheduler: failed to post trivia to channel %s", channel_id
+                )
         except Exception:
             logging.exception(
                 "Scheduler: failed to post trivia to channel %s", channel_id

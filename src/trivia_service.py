@@ -21,56 +21,8 @@ class TriviaService:
     def __init__(self, trivia_api, stats_store):
         self.api = trivia_api
         self.stats = stats_store
-        self._active = {}
         self._posted = {}
         self._posted_answers = {}  # (question_id, user_id) → True
-
-    def create_question(self, user_id, channel_id):
-        """Fetch a question, store state, and return Slack blocks."""
-        max_attempts = 5
-        for _ in range(max_attempts):
-            q = self.api.fetch_question()
-            if not self.stats.has_asked(channel_id, q["id"]):
-                break
-
-        self.stats.record_asked(channel_id, q["id"])
-
-        answers = [q["correctAnswer"]] + q["incorrectAnswers"]
-        random.shuffle(answers)
-        correct_index = answers.index(q["correctAnswer"])
-        labels = LABELS[: len(answers)]
-
-        state = {
-            "question_id": q["id"],
-            "correct_label": labels[correct_index],
-            "correct_answer": q["correctAnswer"],
-            "answers": answers,
-            "labels": labels,
-            "question_text": q["question"]["text"],
-            "category": q["category"],
-            "difficulty": q.get("difficulty", "medium"),
-        }
-        self._active[user_id] = state
-
-        return self._build_question_blocks(state)
-
-    def check_answer(self, user_id, selected_label):
-        """Check the user's answer, record stats, and return result blocks."""
-        state = self._active.pop(user_id, None)
-        if state is None:
-            return None
-
-        is_correct = selected_label == state["correct_label"]
-        self.stats.record_answer(
-            user_id=user_id,
-            question_id=state["question_id"],
-            category=state["category"],
-            difficulty=state["difficulty"],
-            correct=is_correct,
-            selected=selected_label,
-        )
-
-        return self._build_result_blocks(state, selected_label)
 
     def get_user_stats(self, user_id):
         """Return stats summary for a user."""
