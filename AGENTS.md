@@ -11,7 +11,7 @@ src/
 ├── trivia_api.py       # HTTP adapter for the-trivia-api.com
 ├── trivia_service.py   # Game logic — questions, answers, stats, blocks
 ├── stats_store.py      # SQLite persistence — answers, leaderboard, configs
-└── scheduler.py        # APScheduler — daily automated posting (Mon-Fri)
+└── scheduler.py        # APScheduler — daily trivia + weekly leaderboard
 ```
 
 **`app.py`** is the integration layer. It knows Slack (Bolt, Socket Mode) but
@@ -43,8 +43,8 @@ delegates all logic to `TriviaService`. Business logic lives in
 - **Ephemeral answers** — `chat_postEphemeral` ensures answers are private per user.
 - **SQLite with no WAL** — compatible with DB Browser for SQLite for direct editing.
 - **`check_same_thread=False`** — SQLite connection shared across Bolt event threads.
-- **APScheduler** — handles daily posting via `CronTrigger`, re-syncs config from DB
-  every 5 minutes. Weekdays only (Mon-Fri). UTC timezone.
+- **APScheduler** — handles daily trivia (user-configured time, Mon-Fri UTC) and
+  weekly leaderboard (Friday noon Eastern). Re-syncs config from DB every 5 minutes.
 - **`StatsStore` is the single writer to SQLite** — no concurrent write issues.
 
 ## Database schema (SQLite)
