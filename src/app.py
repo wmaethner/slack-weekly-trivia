@@ -230,7 +230,7 @@ def handle_set_time_command(ack, command, client, respond, logger):
     logger.info(f"/set-trivia-time from user={user} text={text}")
 
     if not text:
-        respond("Usage: `/set-trivia-time HH:MM` (UTC, 24-hour). Example: `/set-trivia-time 14:00`")
+        respond("Usage: `/set-trivia-time HH:MM` (ET, 24-hour). Example: `/set-trivia-time 12:00`")
         return
 
     try:
@@ -242,7 +242,7 @@ def handle_set_time_command(ack, command, client, respond, logger):
         if not (0 <= hour <= 23 and 0 <= minute <= 59):
             raise ValueError
     except ValueError:
-        respond("Invalid time format. Use HH:MM (UTC, 24-hour). Example: `/set-trivia-time 14:00`")
+        respond("Invalid time format. Use HH:MM (ET, 24-hour). Example: `/set-trivia-time 12:00`")
         return
 
     post_time = f"{hour:02d}:{minute:02d}"
@@ -250,7 +250,7 @@ def handle_set_time_command(ack, command, client, respond, logger):
     client.chat_postEphemeral(
         channel=channel,
         user=user,
-        text=f"Daily trivia post time set to {post_time} UTC",
+        text=f"Daily trivia post time set to {post_time} ET",
     )
 
 

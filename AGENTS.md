@@ -24,7 +24,7 @@ delegates all logic to `TriviaService`. Business logic lives in
 |---------|-------|-------------|
 | `/post-trivia` | Where bot is member | Post daily question to this channel (public) |
 | `/set-trivia-channel` | Where bot is member | Set this channel for scheduled daily posts |
-| `/set-trivia-time HH:MM` | Anywhere | Set UTC post time (e.g. `14:30`). 24-hour. |
+| `/set-trivia-time HH:MM` | Anywhere | Set post time (ET, e.g. `12:00`). 24-hour. |
 | `/stats` | Anywhere | Personal stats — accuracy, by category, by difficulty |
 | `/leaderboard` | Anywhere | Top 3 by accuracy. Dropdown filters for category/difficulty. |
 
@@ -43,7 +43,7 @@ delegates all logic to `TriviaService`. Business logic lives in
 - **Ephemeral answers** — `chat_postEphemeral` ensures answers are private per user.
 - **SQLite with no WAL** — compatible with DB Browser for SQLite for direct editing.
 - **`check_same_thread=False`** — SQLite connection shared across Bolt event threads.
-- **APScheduler** — handles daily trivia (user-configured time, Mon-Fri UTC) and
+- **APScheduler** — handles daily trivia (user-configured time, Mon-Fri ET) and
   weekly leaderboard (Friday noon Eastern). Re-syncs config from DB every 5 minutes.
 - **`StatsStore` is the single writer to SQLite** — no concurrent write issues.
 

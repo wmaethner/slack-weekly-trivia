@@ -53,7 +53,7 @@ class DailyTriviaScheduler:
                 hour=hour,
                 minute=minute,
                 day_of_week="0-4",  # Mon-Fri
-                timezone="utc",
+                timezone="America/New_York",
             )
             self._scheduler.add_job(
                 self._post_trivia,
@@ -64,7 +64,7 @@ class DailyTriviaScheduler:
                 misfire_grace_time=300,  # 5 min grace if app was down
             )
             logging.info(
-                "Scheduler: team=%s channel=%s cron=%02d:%02d UTC (Mon-Fri)",
+                "Scheduler: team=%s channel=%s cron=%02d:%02d ET (Mon-Fri)",
                 team_id, channel_id, hour, minute,
             )
 

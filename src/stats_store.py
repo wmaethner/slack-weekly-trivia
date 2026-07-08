@@ -2,7 +2,10 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 
-_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+_DATA_DIR = os.environ.get(
+    "TRIVIA_DB_DIR",
+    os.path.join(os.path.dirname(__file__), "data"),
+)
 os.makedirs(_DATA_DIR, exist_ok=True)
 
 
