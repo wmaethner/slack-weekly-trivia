@@ -95,6 +95,14 @@ class StatsStore:
         )
         self._conn.commit()
 
+    def has_answered(self, user_id, question_id):
+        """Check if user already answered this question."""
+        row = self._conn.execute(
+            "SELECT 1 FROM answers WHERE user_id = ? AND question_id = ?",
+            (user_id, question_id),
+        ).fetchone()
+        return row is not None
+
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------

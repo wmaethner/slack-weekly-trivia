@@ -85,7 +85,7 @@ class TriviaService:
             return None
 
         key = (question_id, user_id)
-        if key in self._posted_answers:
+        if key in self._posted_answers or self.stats.has_answered(user_id, question_id):
             return None  # already answered
 
         self._posted_answers[key] = True

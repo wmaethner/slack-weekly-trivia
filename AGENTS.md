@@ -37,6 +37,10 @@ delegates all logic to `TriviaService`. Business logic lives in
 | `leaderboard_category` | Dropdown change | Re-filters leaderboard |
 | `leaderboard_difficulty` | Dropdown change | Re-filters leaderboard |
 
+## Style
+
+- **Type hints** — use Python type hints on all function signatures (params + return).
+
 ## Key design decisions
 
 - **Socket Mode** — no public URL needed. App connects outbound to Slack.
