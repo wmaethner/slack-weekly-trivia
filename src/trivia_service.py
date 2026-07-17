@@ -23,6 +23,7 @@ class TriviaService:
         self.stats = stats_store
         self._posted = {}
         self._posted_answers = {}  # (question_id, user_id) → True
+        self._load_posted_states()
 
     def get_user_stats(self, user_id):
         """Return stats summary for a user."""
@@ -30,6 +31,9 @@ class TriviaService:
 
     def get_leaderboard(self, limit=3, category=None, difficulty=None):
         return self.stats.get_leaderboard(limit, category, difficulty)
+
+    def get_user_rank(self, user_id, category=None, difficulty=None):
+        return self.stats.get_user_rank(user_id, category, difficulty)
 
     def get_active_categories(self):
         return self.stats.get_active_categories()
@@ -58,6 +62,7 @@ class TriviaService:
 
         state = {
             "question_id": q["id"],
+            "channel_id": channel_id,
             "correct_label": labels[correct_index],
             "correct_answer": q["correctAnswer"],
             "answers": answers,
@@ -66,10 +71,26 @@ class TriviaService:
             "category": q["category"],
             "difficulty": q.get("difficulty", "medium"),
         }
+        # Expire old question for this channel
+        old_ids = [
+            qid for qid, s in self._posted.items()
+            if s.get("channel_id") == channel_id
+        ]
+        for old_id in old_ids:
+            del self._posted[old_id]
         self._posted[q["id"]] = state
+        self.stats.record_question_state(channel_id, state)
 
         public_blocks = self._build_public_question_blocks(state)
         return public_blocks, q["id"]
+
+    def _load_posted_states(self):
+        """Hydrate _posted with latest question per channel. Older ones expire."""
+        latest_per_channel = {}
+        for state in self.stats.load_all_question_states():
+            ch = state["channel_id"]
+            latest_per_channel[ch] = state  # later row overwrites = newest wins
+        self._posted = {s["question_id"]: s for s in latest_per_channel.values()}
 
     def get_answer_blocks(self, question_id):
         """Return ephemeral answer blocks for a posted question."""

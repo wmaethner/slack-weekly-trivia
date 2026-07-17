@@ -1,5 +1,11 @@
 # slack-daily-trivia
 
+## Comm
+
+Use caveman skill for all work on this project. Talk like caveman. Be brief.
+
+# slack-daily-trivia
+
 Slack app that posts a daily trivia question to configured channels. Users
 answer privately via ephemeral buttons. Stats and leaderboard track results.
 

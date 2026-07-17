@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -55,6 +56,22 @@ class StatsStore:
             )
             """
         )
+        self._conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS posted_questions (
+                question_id   TEXT PRIMARY KEY,
+                channel_id    TEXT NOT NULL,
+                correct_label TEXT NOT NULL,
+                correct_answer TEXT NOT NULL,
+                answers       TEXT NOT NULL,
+                labels        TEXT NOT NULL,
+                question_text TEXT NOT NULL,
+                category      TEXT NOT NULL,
+                difficulty    TEXT NOT NULL,
+                posted_at     TEXT NOT NULL
+            )
+            """
+        )
         self._conn.commit()
 
     # ------------------------------------------------------------------
@@ -102,6 +119,53 @@ class StatsStore:
             (user_id, question_id),
         ).fetchone()
         return row is not None
+
+    def record_question_state(self, channel_id: str, state: dict) -> None:
+        """Persist posted question state. Keeps all states for historical access."""
+        self._conn.execute(
+            """
+            INSERT INTO posted_questions
+                (question_id, channel_id, correct_label, correct_answer,
+                 answers, labels, question_text, category, difficulty, posted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                state["question_id"],
+                channel_id,
+                state["correct_label"],
+                state["correct_answer"],
+                json.dumps(state["answers"]),
+                json.dumps(state["labels"]),
+                state["question_text"],
+                state["category"],
+                state["difficulty"],
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        self._conn.commit()
+
+    def load_all_question_states(self) -> list[dict]:
+        """Load all persisted question states back into memory."""
+        rows = self._conn.execute(
+            "SELECT * FROM posted_questions ORDER BY posted_at ASC"
+        ).fetchall()
+        results = []
+        for row in rows:
+            results.append(
+                {
+                    "question_id": row[0],
+                    "channel_id": row[1],
+                    "correct_label": row[2],
+                    "correct_answer": row[3],
+                    "answers": json.loads(row[4]),
+                    "labels": json.loads(row[5]),
+                    "question_text": row[6],
+                    "category": row[7],
+                    "difficulty": row[8],
+                    "posted_at": row[9],
+                }
+            )
+        return results
 
     # ------------------------------------------------------------------
     # Read
@@ -177,6 +241,46 @@ class StatsStore:
             }
             for r in rows
         ]
+
+    def get_user_rank(self, user_id, category=None, difficulty=None):
+        where = []
+        params = []
+
+        if category:
+            where.append("category = ?")
+            params.append(category)
+        if difficulty:
+            where.append("difficulty = ?")
+            params.append(difficulty)
+
+        clause = ""
+        if where:
+            clause = "WHERE " + " AND ".join(where)
+
+        rows = self._conn.execute(
+            f"""
+            SELECT user_id, COUNT(*) AS total, SUM(correct) AS correct
+            FROM answers
+            {clause}
+            GROUP BY user_id
+            ORDER BY CAST(SUM(correct) AS REAL) / COUNT(*) DESC, SUM(correct) DESC
+            """
+        ).fetchall()
+
+        total_players = len(rows)
+        for rank, row in enumerate(rows, start=1):
+            if row[0] == user_id:
+                t = row[1]
+                c = row[2] or 0
+                accuracy = round(c / t * 100, 1) if t else 0
+                return {
+                    "rank": rank,
+                    "total_players": total_players,
+                    "total": t,
+                    "correct": c,
+                    "accuracy": accuracy,
+                }
+        return None
 
     def get_active_categories(self):
         rows = self._conn.execute(

@@ -301,7 +301,7 @@ def _build_leaderboard_blocks(user, category, difficulty):
     TROPHIES = [":first_place_medal:", ":second_place_medal:", ":third_place_medal:"]
 
     board = trivia_service.get_leaderboard(
-        limit=3, category=category, difficulty=difficulty
+        limit=5, category=category, difficulty=difficulty
     )
     categories = trivia_service.get_active_categories()
     difficulties = trivia_service.get_active_difficulties()
@@ -410,6 +410,21 @@ def _build_leaderboard_blocks(user, category, difficulty):
             {
                 "type": "section",
                 "text": {"type": "mrkdwn", "text": "\n".join(lines)},
+            }
+        )
+
+    my_rank = trivia_service.get_user_rank(user, category, difficulty)
+    if my_rank:
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Your rank:* #{my_rank['rank']} of {my_rank['total_players']}"
+                        f"  ({my_rank['accuracy']}%)"
+                    ),
+                },
             }
         )
 

@@ -134,7 +134,7 @@ class DailyTriviaScheduler:
             ":third_place_medal:",
         ]
 
-        board = self._service.get_leaderboard(limit=3)
+        board = self._service.get_leaderboard(limit=5)
         categories = self._service.get_active_categories()
 
         blocks = [
@@ -169,7 +169,7 @@ class DailyTriviaScheduler:
             blocks.append(
                 {
                     "type": "section",
-                    "text": {"type": "mrkdwn", "text": "*Overall Top 3*\n" + "\n".join(lines)},
+                    "text": {"type": "mrkdwn", "text": "*Overall Top 5*\n" + "\n".join(lines)},
                 }
             )
 
