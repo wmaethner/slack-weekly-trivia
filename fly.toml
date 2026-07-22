@@ -20,8 +20,12 @@ primary_region = "iad"
   auto_stop_machines = false
 
   [[services.ports]]
-    port = 8080
+    port = 443
     handlers = ["tls"]
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
 
 [experimental]
   auto_rollback = true
