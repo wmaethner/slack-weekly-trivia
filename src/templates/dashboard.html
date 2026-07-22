@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trivia Admin</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 24px; padding: 16px 20px;
+            background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        header h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; }
+        header h1 span { color: #6b7280; font-weight: 400; }
+        header .refresh { font-size: 13px; color: #6b7280; }
+        header .refresh a { color: #3b82f6; text-decoration: none; }
+        header .refresh a:hover { text-decoration: underline; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card {
+            background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            transition: box-shadow 0.2s;
+        }
+        .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .card .label { font-size: 13px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .card .value { font-size: 32px; font-weight: 700; color: #1a1a2e; }
+        .card .sub { font-size: 13px; color: #6b7280; margin-top: 4px; }
+        .card .value.good { color: #10b981; }
+        .card .value.warn { color: #f59e0b; }
+        .card .value.neutral { color: #3b82f6; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+        .panel {
+            background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        .panel h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #374151; }
+        .panel.full { grid-column: 1 / -1; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th { text-align: left; padding: 8px 12px; border-bottom: 2px solid #e5e7eb; color: #6b7280; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
+        tr:hover td { background: #f9fafb; }
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 4px;
+            font-size: 12px; font-weight: 600;
+        }
+        .badge.green { background: #d1fae5; color: #065f46; }
+        .badge.yellow { background: #fef3c7; color: #92400e; }
+        .badge.red { background: #fee2e2; color: #991b1b; }
+        .badge.blue { background: #dbeafe; color: #1e40af; }
+        .bar-bg { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
+        .bar-fill { height: 100%; border-radius: 3px; }
+        .chart-container { position: relative; height: 300px; }
+        @media (max-width: 768px) {
+            .grid-2 { grid-template-columns: 1fr; }
+            .cards { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>Trivia Admin <span>Dashboard</span></h1>
+        <div class="refresh">
+            <a href="/admin/dashboard">Refresh</a>
+        </div>
+    </header>
+
+    <!-- Overview cards -->
+    <div class="cards">
+        <div class="card">
+            <div class="label">Total Answers</div>
+            <div class="value neutral">{{ overview.total_answers }}</div>
+            <div class="sub">{{ overview.answers_today }} today &middot; {{ overview.answers_this_week }} this week</div>
+        </div>
+        <div class="card">
+            <div class="label">Total Users</div>
+            <div class="value neutral">{{ overview.total_users }}</div>
+            <div class="sub">unique participants</div>
+        </div>
+        <div class="card">
+            <div class="label">Accuracy</div>
+            <div class="value {% if overview.overall_accuracy >= 60 %}good{% elif overview.overall_accuracy >= 40 %}warn{% else %}red{% endif %}">
+                {{ "%.1f"|format(overview.overall_accuracy) }}%
+            </div>
+            <div class="sub">global average</div>
+        </div>
+        <div class="card">
+            <div class="label">Workspaces</div>
+            <div class="value neutral">{{ overview.active_workspaces }}</div>
+            <div class="sub">active channels configured</div>
+        </div>
+    </div>
+
+    <!-- Daily answer chart -->
+    <div class="panel full">
+        <h2>Daily Answers (Last 30 Days)</h2>
+        <div class="chart-container">
+            <canvas id="dailyChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Category & Difficulty -->
+    <div class="grid-2">
+        <div class="panel">
+            <h2>By Category</h2>
+            <table>
+                <thead>
+                    <tr><th>Category</th><th>Answers</th><th>Correct</th><th>Accuracy</th></tr>
+                </thead>
+                <tbody>
+                    {% for c in categories %}
+                    <tr>
+                        <td>{{ c.category.replace('_', ' ').title() }}</td>
+                        <td>{{ c.total }}</td>
+                        <td>{{ c.correct }}</td>
+                        <td>
+                            <span class="badge {% if c.accuracy >= 60 %}green{% elif c.accuracy >= 40 %}yellow{% else %}red{% endif %}">
+                                {{ "%.1f"|format(c.accuracy) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="panel">
+            <h2>By Difficulty</h2>
+            <table>
+                <thead>
+                    <tr><th>Difficulty</th><th>Answers</th><th>Correct</th><th>Accuracy</th></tr>
+                </thead>
+                <tbody>
+                    {% for d in difficulties %}
+                    <tr>
+                        <td>{{ d.difficulty.title() }}</td>
+                        <td>{{ d.total }}</td>
+                        <td>{{ d.correct }}</td>
+                        <td>
+                            <span class="badge {% if d.accuracy >= 60 %}green{% elif d.accuracy >= 40 %}yellow{% else %}red{% endif %}">
+                                {{ "%.1f"|format(d.accuracy) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Top users -->
+    <div class="panel full">
+        <h2>Top Users (Accuracy)</h2>
+        <table>
+            <thead>
+                <tr><th>Rank</th><th>User</th><th>Answered</th><th>Correct</th><th>Accuracy</th><th>Bar</th></tr>
+            </thead>
+            <tbody>
+                {% for entry in leaderboard %}
+                <tr>
+                    <td><strong>#{{ loop.index }}</strong></td>
+                    <td><code>{{ entry.user_id }}</code></td>
+                    <td>{{ entry.total }}</td>
+                    <td>{{ entry.correct }}</td>
+                    <td>
+                        <span class="badge {% if entry.accuracy >= 60 %}green{% elif entry.accuracy >= 40 %}yellow{% else %}red{% endif %}">
+                            {{ "%.1f"|format(entry.accuracy) }}%
+                        </span>
+                    </td>
+                    <td>
+                        <div class="bar-bg">
+                            <div class="bar-fill" style="width: {{ entry.accuracy }}%; background: {% if entry.accuracy >= 60 %}#10b981{% elif entry.accuracy >= 40 %}#f59e0b{% else %}#ef4444{% endif %};"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not leaderboard %}
+                <tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px;">No data yet</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Configs -->
+    <div class="panel full">
+        <h2>Workspace Configurations</h2>
+        <table>
+            <thead>
+                <tr><th>Team ID</th><th>Channel ID</th><th>Post Time (ET)</th></tr>
+            </thead>
+            <tbody>
+                {% for cfg in configs %}
+                <tr>
+                    <td><code>{{ cfg.team_id }}</code></td>
+                    <td><code>{{ cfg.channel_id }}</code></td>
+                    <td>{{ cfg.post_time }}</td>
+                </tr>
+                {% endfor %}
+                {% if not configs %}
+                <tr><td colspan="3" style="text-align:center;color:#9ca3af;padding:24px;">No workspaces configured</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Daily chart
+    var dailyData = {{ daily | tojson | safe }};
+    var ctx = document.getElementById('dailyChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dailyData.map(function(d) { return d.date; }),
+            datasets: [{
+                label: 'Answers',
+                data: dailyData.map(function(d) { return d.total; }),
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+            }, {
+                label: 'Correct',
+                data: dailyData.map(function(d) { return d.correct; }),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+            }, {
+                label: 'Unique Users',
+                data: dailyData.map(function(d) { return d.unique_users; }),
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245,158,11,0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                yAxisID: 'y1',
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: { position: 'top' },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.04)' },
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: { display: false },
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { maxTicksLimit: 15 },
+                }
+            }
+        }
+    });
+})();
+</script>
+</body>
+</html>

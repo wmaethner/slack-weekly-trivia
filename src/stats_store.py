@@ -317,6 +317,138 @@ class StatsStore:
         return result
 
     # ------------------------------------------------------------------
+    # Admin / Dashboard queries
+    # ------------------------------------------------------------------
+
+    def get_daily_answer_counts(self, days: int = 30) -> list[dict]:
+        rows = self._conn.execute(
+            """
+            SELECT substr(timestamp, 1, 10) as day,
+                   COUNT(*) as total,
+                   SUM(correct) as correct,
+                   COUNT(DISTINCT user_id) as unique_users
+            FROM answers
+            WHERE timestamp >= date('now', '-' || ? || ' days')
+            GROUP BY day
+            ORDER BY day ASC
+            """,
+            (str(days),),
+        ).fetchall()
+        return [
+            {"date": r[0], "total": r[1], "correct": r[2] or 0, "unique_users": r[3]}
+            for r in rows
+        ]
+
+    def get_all_user_summaries(self, page: int = 1, per_page: int = 50,
+                                sort: str = "answers") -> dict:
+        sort_map = {
+            "answers": "total DESC",
+            "accuracy": "accuracy DESC, total DESC",
+            "correct": "correct DESC",
+        }
+        order = sort_map.get(sort, "total DESC")
+
+        count_row = self._conn.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM answers"
+        ).fetchone()
+        total_users = count_row[0]
+
+        offset = (page - 1) * per_page
+        rows = self._conn.execute(
+            f"""
+            SELECT user_id, COUNT(*) as total, SUM(correct) as correct,
+                   CAST(SUM(correct) AS REAL) / COUNT(*) as accuracy
+            FROM answers
+            GROUP BY user_id
+            ORDER BY {order}
+            LIMIT ? OFFSET ?
+            """,
+            (per_page, offset),
+        ).fetchall()
+
+        users = [
+            {
+                "user_id": r[0],
+                "total": r[1],
+                "correct": r[2] or 0,
+                "accuracy": round(r[3] * 100, 1) if r[3] else 0,
+            }
+            for r in rows
+        ]
+
+        return {
+            "users": users,
+            "total": total_users,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, (total_users + per_page - 1) // per_page),
+        }
+
+    def get_total_answer_count(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) FROM answers").fetchone()
+        return row[0]
+
+    def get_total_user_count(self) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(DISTINCT user_id) FROM answers"
+        ).fetchone()
+        return row[0]
+
+    def get_global_accuracy(self) -> float:
+        row = self._conn.execute(
+            "SELECT COUNT(*), SUM(correct) FROM answers"
+        ).fetchone()
+        total = row[0]
+        correct = row[1] or 0
+        return round(correct / total * 100, 1) if total else 0
+
+    def get_category_stats(self) -> list[dict]:
+        rows = self._conn.execute(
+            """
+            SELECT category, COUNT(*) as total, SUM(correct) as correct
+            FROM answers
+            GROUP BY category
+            ORDER BY total DESC
+            """
+        ).fetchall()
+        return [
+            {
+                "category": r[0],
+                "total": r[1],
+                "correct": r[2] or 0,
+                "accuracy": round(r[2] / r[1] * 100, 1) if r[1] else 0,
+            }
+            for r in rows
+        ]
+
+    def get_difficulty_stats(self) -> list[dict]:
+        rows = self._conn.execute(
+            """
+            SELECT difficulty, COUNT(*) as total, SUM(correct) as correct
+            FROM answers
+            GROUP BY difficulty
+            ORDER BY CASE difficulty
+                WHEN 'easy' THEN 1 WHEN 'medium' THEN 2 WHEN 'hard' THEN 3 ELSE 4
+            END
+            """
+        ).fetchall()
+        return [
+            {
+                "difficulty": r[0],
+                "total": r[1],
+                "correct": r[2] or 0,
+                "accuracy": round(r[2] / r[1] * 100, 1) if r[1] else 0,
+            }
+            for r in rows
+        ]
+
+    def get_workspace_count(self) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM workspace_configs"
+        ).fetchone()
+        return row[0]
+
+    # ------------------------------------------------------------------
     # Workspace config
     # ------------------------------------------------------------------
 

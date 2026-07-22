@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import signal
+import threading
 
 import requests
 from dotenv import load_dotenv
@@ -521,6 +522,9 @@ def main():
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
+
+    from admin_server import start_in_thread as start_admin
+    start_admin()
 
     scheduler = DailyTriviaScheduler(trivia_service, app.client)
     scheduler.start()
