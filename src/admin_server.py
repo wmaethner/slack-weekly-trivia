@@ -127,7 +127,7 @@ def _answers_since(since: str) -> int:
 
 def run():
     logger.info(f"Admin server starting on {ADMIN_HOST}:{ADMIN_PORT}")
-    uvicorn.run(app, host="::", port=ADMIN_PORT, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=ADMIN_PORT, log_level="info")
 
 
 def start_in_thread():

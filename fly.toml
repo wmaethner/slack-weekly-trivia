@@ -13,19 +13,11 @@ primary_region = "iad"
   cpu_kind = "shared"
   cpus = 1
 
-[[services]]
+[http_service]
   internal_port = 8080
-  protocol = "tcp"
-  auto_starts_machines = true
+  force_https = true
   auto_stop_machines = false
-
-  [[services.ports]]
-    port = 443
-    handlers = ["tls"]
-
-  [[services.ports]]
-    port = 80
-    handlers = ["http"]
+  auto_start_machines = true
 
 [experimental]
   auto_rollback = true
