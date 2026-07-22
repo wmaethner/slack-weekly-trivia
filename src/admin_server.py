@@ -5,7 +5,7 @@ import logging
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader
 
 from stats_store import StatsStore
 
@@ -15,7 +15,7 @@ ADMIN_HOST = os.getenv("ADMIN_HOST", "0.0.0.0")
 ADMIN_PORT = int(os.getenv("ADMIN_PORT", "8080"))
 
 app = FastAPI(title="Trivia Admin")
-templates = Jinja2Templates(directory="src/templates")
+_env = Environment(loader=FileSystemLoader("src/templates"))
 
 store = StatsStore()
 
@@ -35,17 +35,18 @@ async def dashboard_page(request: Request):
     users_page = store.get_all_user_summaries(page=1, per_page=50, sort="answers")
     configs = store.get_all_configs()
 
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "overview": overview,
-        "daily": daily,
-        "categories": categories,
-        "difficulties": difficulties,
-        "leaderboard": leaderboard,
-        "users": users_page["users"],
-        "total_users": users_page["total"],
-        "configs": configs,
-    })
+    template = _env.get_template("dashboard.html")
+    html = template.render(
+        overview=overview,
+        daily=daily,
+        categories=categories,
+        difficulties=difficulties,
+        leaderboard=leaderboard,
+        users=users_page["users"],
+        total_users=users_page["total"],
+        configs=configs,
+    )
+    return HTMLResponse(html)
 
 
 # ------------------------------------------------------------------

@@ -4,6 +4,10 @@
 
 Use caveman skill for all work on this project. Talk like caveman. Be brief.
 
+## Rules
+
+- NEVER commit or push code. Present changes, let user review and commit.
+
 # slack-daily-trivia
 
 Slack app that posts a daily trivia question to configured channels. Users
