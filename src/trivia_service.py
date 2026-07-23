@@ -35,6 +35,9 @@ class TriviaService:
     def get_user_rank(self, user_id, category=None, difficulty=None):
         return self.stats.get_user_rank(user_id, category, difficulty)
 
+    def get_streak_leaderboard(self, limit=3):
+        return self.stats.get_streak_leaderboard(limit)
+
     def get_user_answer_count(self, user_id: str) -> int:
         return self.stats.get_user_answer_count(user_id)
 

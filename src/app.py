@@ -414,6 +414,27 @@ def _build_leaderboard_blocks(user, category, difficulty):
             }
         )
 
+    # Streak leaderboard
+    streaks = trivia_service.get_streak_leaderboard(limit=3)
+    if streaks:
+        streak_lines = []
+        for i, s in enumerate(streaks):
+            trophy = [":first_place_medal:", ":second_place_medal:", ":third_place_medal:"][i]
+            streak_lines.append(
+                f"{trophy}  <@{s['user_id']}>  "
+                f"{s['streak']} correct in a row"
+            )
+        blocks.append({"type": "divider"})
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": ":fire:  *Top Streaks*\n" + "\n".join(streak_lines),
+                },
+            }
+        )
+
     my_rank = trivia_service.get_user_rank(user, category, difficulty)
     if my_rank:
         blocks.append(
