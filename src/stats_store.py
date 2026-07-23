@@ -171,6 +171,13 @@ class StatsStore:
     # Read
     # ------------------------------------------------------------------
 
+    def get_user_answer_count(self, user_id: str) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM answers WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+        return row[0]
+
     def has_asked(self, channel_id, question_id):
         """Check if a question has already been asked in a channel."""
         row = self._conn.execute(
@@ -226,6 +233,7 @@ class StatsStore:
             FROM answers
             {clause}
             GROUP BY user_id
+            HAVING COUNT(*) >= 5
             ORDER BY CAST(SUM(correct) AS REAL) / COUNT(*) DESC, SUM(correct) DESC
             LIMIT ?
             """,
@@ -263,6 +271,7 @@ class StatsStore:
             FROM answers
             {clause}
             GROUP BY user_id
+            HAVING COUNT(*) >= 5
             ORDER BY CAST(SUM(correct) AS REAL) / COUNT(*) DESC, SUM(correct) DESC
             """
         ).fetchall()

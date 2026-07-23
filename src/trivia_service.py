@@ -35,6 +35,9 @@ class TriviaService:
     def get_user_rank(self, user_id, category=None, difficulty=None):
         return self.stats.get_user_rank(user_id, category, difficulty)
 
+    def get_user_answer_count(self, user_id: str) -> int:
+        return self.stats.get_user_answer_count(user_id)
+
     def get_active_categories(self):
         return self.stats.get_active_categories()
 

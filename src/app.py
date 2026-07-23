@@ -428,6 +428,23 @@ def _build_leaderboard_blocks(user, category, difficulty):
                 },
             }
         )
+    else:
+        total = trivia_service.get_user_answer_count(user)
+        if 0 < total < 5:
+            need = 5 - total
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            f":hourglass_flowing_sand:  Answer *{need} more*"
+                            f" question{'s' if need > 1 else ''} to get ranked on"
+                            " the leaderboard (min 5 required)."
+                        ),
+                    },
+                }
+            )
 
     active_filters = []
     if category:
@@ -441,7 +458,7 @@ def _build_leaderboard_blocks(user, category, difficulty):
         {
             "type": "context",
             "elements": [
-                {"type": "mrkdwn", "text": f"Filters: {filter_text}"}
+                {"type": "mrkdwn", "text": f"Filters: {filter_text}  •  Min 5 answers to rank"},
             ],
         }
     )
