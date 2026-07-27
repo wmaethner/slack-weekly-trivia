@@ -53,11 +53,22 @@ class TriviaService:
 
     def create_posted_question(self, channel_id):
         """Fetch a question and return public channel blocks + question_id."""
-        max_attempts = 5
-        for _ in range(max_attempts):
-            q = self.api.fetch_question()
-            if not self.stats.has_asked(channel_id, q["id"]):
+        batch = self.api.fetch_questions(limit=20)
+        q = None
+        for candidate in batch:
+            if not self.stats.has_asked(channel_id, candidate["id"]):
+                q = candidate
                 break
+
+        if q is None:
+            for _ in range(5):
+                candidate = self.api.fetch_question()
+                if not self.stats.has_asked(channel_id, candidate["id"]):
+                    q = candidate
+                    break
+
+        if q is None:
+            raise RuntimeError("Could not find a unique question")
 
         self.stats.record_asked(channel_id, q["id"])
 
