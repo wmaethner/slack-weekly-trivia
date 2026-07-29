@@ -256,14 +256,19 @@ class StatsStore:
         ).fetchall()
 
         streaks = {}
+        done = set()
         for user_id, correct in rows:
+            if user_id in done:
+                continue
             if user_id not in streaks:
-                streaks[user_id] = 1 if correct == 1 else -1
-            elif streaks[user_id] > 0:
                 if correct == 1:
-                    streaks[user_id] += 1
+                    streaks[user_id] = 1
                 else:
-                    streaks[user_id] = -1
+                    done.add(user_id)
+            elif correct == 1:
+                streaks[user_id] += 1
+            else:
+                done.add(user_id)
 
         result = [(uid, s) for uid, s in streaks.items() if s > 0]
         result.sort(key=lambda x: (-x[1], x[0]))
