@@ -331,6 +331,35 @@ class StatsStore:
         ).fetchall()
         return [r[0] for r in rows]
 
+    def get_question_extremes(self, start: str, end: str) -> list[dict]:
+        """Questions posted in [start, end) with at least one answer,
+        ordered by accuracy ascending (hardest first, easiest last)."""
+        rows = self._conn.execute(
+            """
+            SELECT p.question_id, p.question_text, p.category, p.difficulty,
+                   p.correct_answer, COUNT(a.user_id) as total, SUM(a.correct) as correct
+            FROM posted_questions p
+            JOIN answers a ON a.question_id = p.question_id
+            WHERE p.posted_at >= ? AND p.posted_at < ?
+            GROUP BY p.question_id
+            ORDER BY CAST(SUM(a.correct) AS REAL) / COUNT(a.user_id) ASC
+            """,
+            (start, end),
+        ).fetchall()
+        return [
+            {
+                "question_id": r[0],
+                "question_text": r[1],
+                "category": r[2],
+                "difficulty": r[3],
+                "correct_answer": r[4],
+                "total": r[5],
+                "correct": r[6] or 0,
+                "accuracy": round(r[6] / r[5] * 100, 1) if r[5] else 0,
+            }
+            for r in rows
+        ]
+
     def _group_by(self, user_id, column):
         rows = self._conn.execute(
             f"""

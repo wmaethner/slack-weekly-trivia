@@ -11,9 +11,10 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from slack_sdk.errors import SlackApiError
 
 from trivia_api import TriviaApi
-from trivia_service import CATEGORY_EMOJI, TriviaService
+from trivia_service import TriviaService
 from stats_store import StatsStore
 from scheduler import DailyTriviaScheduler
+from slack_blocks import build_stats_blocks, build_leaderboard_command_blocks
 
 logging.basicConfig(level=logging.INFO)
 load_dotenv()
@@ -88,68 +89,7 @@ def handle_stats_command(ack, command, client, respond, logger):
         respond("No trivia stats yet. Run `/trivia` to play!")
         return
 
-    total = stats["total"]
-    correct = stats["correct"]
-    accuracy = stats["accuracy"]
-
-    blocks = [
-        {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": ":bar_chart:  Your Trivia Stats",
-                "emoji": True,
-            },
-        },
-        {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": (
-                    f"*Total:* {total}  |  *Correct:* {correct}  |"
-                    f"  *Wrong:* {total - correct}  |  *Accuracy:* {accuracy}%"
-                ),
-            },
-        },
-    ]
-
-    if stats["by_difficulty"]:
-        lines = []
-        for level in ["easy", "medium", "hard"]:
-            d = stats["by_difficulty"].get(level)
-            if d:
-                lines.append(
-                    f"• {level.title()}: {d['correct']}/{d['total']}"
-                    f" ({d['accuracy']}%)"
-                )
-        blocks.append(
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*By Difficulty*\n" + "\n".join(lines),
-                },
-            }
-        )
-
-    if stats["by_category"]:
-        lines = []
-        for cat, d in stats["by_category"].items():
-            emoji = CATEGORY_EMOJI.get(cat, ":grey_question:")
-            display = cat.replace("_", " ").title()
-            lines.append(
-                f"{emoji}  {display}: {d['correct']}/{d['total']}"
-                f" ({d['accuracy']}%)"
-            )
-        blocks.append(
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "*By Category*\n" + "\n".join(lines),
-                },
-            }
-        )
+    blocks = build_stats_blocks(stats)
 
     client.chat_postEphemeral(
         channel=channel,
@@ -168,7 +108,7 @@ def handle_leaderboard_command(ack, command, client, respond, logger):
     logger.info(f"/leaderboard from user={user}")
 
     leaderboard_filters[user] = {"category": None, "difficulty": None}
-    blocks = _build_leaderboard_blocks(user, None, None)
+    blocks = _fetch_leaderboard_blocks(user, None, None)
     client.chat_postEphemeral(
         channel=channel,
         user=user,
@@ -282,7 +222,7 @@ def _update_leaderboard(body, key, value):
         filters[key] = value
 
     leaderboard_filters[user] = filters
-    blocks = _build_leaderboard_blocks(user, filters["category"], filters["difficulty"])
+    blocks = _fetch_leaderboard_blocks(user, filters["category"], filters["difficulty"])
 
     requests.post(
         body["response_url"],
@@ -291,200 +231,17 @@ def _update_leaderboard(body, key, value):
     )
 
 
-def _find_option(options, value):
-    for opt in options:
-        if opt["value"] == value:
-            return opt
-    return options[0]
-
-
-def _build_leaderboard_blocks(user, category, difficulty):
-    TROPHIES = [":first_place_medal:", ":second_place_medal:", ":third_place_medal:"]
-
-    board = trivia_service.get_leaderboard(
-        limit=5, category=category, difficulty=difficulty
-    )
+def _fetch_leaderboard_blocks(user, category, difficulty):
+    board = trivia_service.get_leaderboard(limit=5, category=category, difficulty=difficulty)
     categories = trivia_service.get_active_categories()
     difficulties = trivia_service.get_active_difficulties()
-
-    cat_options = [
-        {
-            "text": {"type": "plain_text", "text": "All Categories", "emoji": True},
-            "value": "all",
-        }
-    ]
-    for cat in categories:
-        cat_options.append(
-            {
-                "text": {
-                    "type": "plain_text",
-                    "text": f"{CATEGORY_EMOJI.get(cat, ':grey_question:')}  {cat.replace('_', ' ').title()}",
-                    "emoji": True,
-                },
-                "value": cat,
-            }
-        )
-
-    diff_options = [
-        {
-            "text": {"type": "plain_text", "text": "All Difficulties", "emoji": True},
-            "value": "all",
-        }
-    ]
-    for d in difficulties:
-        diff_options.append(
-            {
-                "text": {
-                    "type": "plain_text",
-                    "text": d.title(),
-                    "emoji": True,
-                },
-                "value": d,
-            }
-        )
-
-    blocks = [
-        {
-            "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": ":trophy:  Leaderboard",
-                "emoji": True,
-            },
-        },
-        {
-            "type": "actions",
-            "elements": [
-                {
-                    "type": "static_select",
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "Category",
-                        "emoji": True,
-                    },
-                    "options": cat_options,
-                    "action_id": "leaderboard_category",
-                    **(
-                        {"initial_option": _find_option(cat_options, category)}
-                        if category
-                        else {}
-                    ),
-                },
-                {
-                    "type": "static_select",
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "Difficulty",
-                        "emoji": True,
-                    },
-                    "options": diff_options,
-                    "action_id": "leaderboard_difficulty",
-                    **(
-                        {"initial_option": _find_option(diff_options, difficulty)}
-                        if difficulty
-                        else {}
-                    ),
-                },
-            ],
-        },
-    ]
-
-    if not board:
-        blocks.append(
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": "No stats yet! Play `/trivia` to get on the board.",
-                },
-            }
-        )
-    else:
-        lines = []
-        for i, entry in enumerate(board):
-            trophy = TROPHIES[i] if i < len(TROPHIES) else f"{i + 1}."
-            lines.append(
-                f"{trophy}  <@{entry['user_id']}>  "
-                f"{entry['accuracy']}%  ({entry['correct']}/{entry['total']})"
-            )
-        blocks.append(
-            {
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": "\n".join(lines)},
-            }
-        )
-
-    # Streak leaderboard
     streaks = trivia_service.get_streak_leaderboard(limit=3)
-    if streaks:
-        streak_lines = []
-        for i, s in enumerate(streaks):
-            trophy = [":first_place_medal:", ":second_place_medal:", ":third_place_medal:"][i]
-            streak_lines.append(
-                f"{trophy}  <@{s['user_id']}>  "
-                f"{s['streak']} correct in a row"
-            )
-        blocks.append({"type": "divider"})
-        blocks.append(
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": ":fire:  *Top Streaks*\n" + "\n".join(streak_lines),
-                },
-            }
-        )
-
     my_rank = trivia_service.get_user_rank(user, category, difficulty)
-    if my_rank:
-        blocks.append(
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": (
-                        f"*Your rank:* #{my_rank['rank']} of {my_rank['total_players']}"
-                        f"  ({my_rank['accuracy']}%)"
-                    ),
-                },
-            }
-        )
-    else:
-        total = trivia_service.get_user_answer_count(user)
-        if 0 < total < 5:
-            need = 5 - total
-            blocks.append(
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": (
-                            f":hourglass_flowing_sand:  Answer *{need} more*"
-                            f" question{'s' if need > 1 else ''} to get ranked on"
-                            " the leaderboard (min 5 required)."
-                        ),
-                    },
-                }
-            )
-
-    active_filters = []
-    if category:
-        display = category.replace("_", " ").title()
-        active_filters.append(f"{CATEGORY_EMOJI.get(category, '')} {display}")
-    if difficulty:
-        active_filters.append(difficulty.title())
-    filter_text = "  •  ".join(active_filters) if active_filters else "All"
-
-    blocks.append(
-        {
-            "type": "context",
-            "elements": [
-                {"type": "mrkdwn", "text": f"Filters: {filter_text}  •  Min 5 answers to rank"},
-            ],
-        }
+    answer_count = 0 if my_rank else trivia_service.get_user_answer_count(user)
+    return build_leaderboard_command_blocks(
+        board, categories, difficulties, category, difficulty,
+        streaks, my_rank, answer_count,
     )
-
-    return blocks
 
 
 @app.action("start_answer")

@@ -57,8 +57,9 @@ delegates all logic to `TriviaService`. Business logic lives in
 - **Ephemeral answers** — `chat_postEphemeral` ensures answers are private per user.
 - **SQLite with no WAL** — compatible with DB Browser for SQLite for direct editing.
 - **`check_same_thread=False`** — SQLite connection shared across Bolt event threads.
-- **APScheduler** — handles daily trivia (user-configured time, Mon-Fri ET) and
-  weekly leaderboard (Friday noon Eastern). Re-syncs config from DB every 5 minutes.
+- **APScheduler** — handles daily trivia (user-configured time, Mon-Fri ET),
+  weekly leaderboard (Friday 3:00 PM Eastern), and monthly hardest/easiest
+  recap (1st of month, noon Eastern). Re-syncs config from DB every 5 minutes.
 - **`StatsStore` is the single writer to SQLite** — no concurrent write issues.
 
 ## Database schema (SQLite)

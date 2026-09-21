@@ -1,17 +1,7 @@
 import random
 
-CATEGORY_EMOJI = {
-    "music": ":musical_note:",
-    "sport_and_leisure": ":soccer:",
-    "film_and_tv": ":clapper:",
-    "arts_and_literature": ":art:",
-    "history": ":hourglass:",
-    "society_and_culture": ":globe_with_meridians:",
-    "science": ":microscope:",
-    "geography": ":earth_americas:",
-    "food_and_drink": ":fork_and_knife:",
-    "general_knowledge": ":brain:",
-}
+from slack_blocks import build_question_blocks, build_result_blocks, build_public_question_blocks
+
 LABELS = ["A", "B", "C", "D", "E"]
 
 
@@ -46,6 +36,9 @@ class TriviaService:
 
     def get_active_difficulties(self):
         return self.stats.get_active_difficulties()
+
+    def get_question_extremes(self, start: str, end: str) -> list[dict]:
+        return self.stats.get_question_extremes(start, end)
 
     # ------------------------------------------------------------------
     # Posted questions (shared, multi-answerer)
@@ -98,7 +91,7 @@ class TriviaService:
         self._posted[q["id"]] = state
         self.stats.record_question_state(channel_id, state)
 
-        public_blocks = self._build_public_question_blocks(state)
+        public_blocks = build_public_question_blocks(state)
         return public_blocks, q["id"]
 
     def _load_posted_states(self):
@@ -114,7 +107,7 @@ class TriviaService:
         state = self._posted.get(question_id)
         if state is None:
             return None
-        return self._build_question_blocks(state, "posted_trivia_answer_")
+        return build_question_blocks(state, "posted_trivia_answer_")
 
     def check_posted_answer(self, question_id, user_id, selected_label):
         """Check a posted answer, prevent double-answers, record stats."""
@@ -137,7 +130,7 @@ class TriviaService:
             selected=selected_label,
         )
 
-        return self._build_result_blocks(state, selected_label)
+        return build_result_blocks(state, selected_label)
 
     # ------------------------------------------------------------------
     # Workspace config passthroughs
@@ -154,185 +147,3 @@ class TriviaService:
 
     def get_all_configs(self):
         return self.stats.get_all_configs()
-
-    # ------------------------------------------------------------------
-    # Block builders
-    # ------------------------------------------------------------------
-
-    def _build_question_blocks(self, state, action_prefix="trivia_answer_"):
-        emoji = CATEGORY_EMOJI.get(state["category"], ":grey_question:")
-        category_title = state["category"].replace("_", " ").title()
-
-        blocks = [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": f"{emoji}  {category_title}",
-                    "emoji": True,
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{state['question_text']}*",
-                },
-            },
-        ]
-
-        for label, answer in zip(state["labels"], state["answers"]):
-            value = label
-            if action_prefix != "trivia_answer_":
-                value = f"{label}|{state['question_id']}"
-
-            blocks.append(
-                {
-                    "type": "actions",
-                    "elements": [
-                        {
-                            "type": "button",
-                            "text": {
-                                "type": "plain_text",
-                                "emoji": True,
-                                "text": f"{label}. {answer}",
-                            },
-                            "action_id": f"{action_prefix}{label.lower()}",
-                            "value": value,
-                        }
-                    ],
-                }
-            )
-
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"Difficulty: {state['difficulty']}  •  Pick an answer above",
-                    }
-                ],
-            }
-        )
-
-        return blocks
-
-    def _build_result_blocks(self, state, selected_label):
-        correct_label = state["correct_label"]
-        is_correct = selected_label == correct_label
-
-        header_text = (
-            ":white_check_mark:  Correct!"
-            if is_correct
-            else ":x:  Wrong!"
-        )
-
-        blocks = [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": header_text,
-                    "emoji": True,
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{state['question_text']}*",
-                },
-            },
-        ]
-
-        for label, answer in zip(state["labels"], state["answers"]):
-            if label == correct_label:
-                if label == selected_label:
-                    line = (
-                        f":white_check_mark:  *{label})  {answer}*"
-                        "  ← correct  (your pick)"
-                    )
-                else:
-                    line = f":white_check_mark:  *{label})  {answer}*  ← correct"
-            elif label == selected_label:
-                line = f":x:  {label})  {answer}  ← your answer"
-            else:
-                line = f"     {label})  {answer}"
-
-            blocks.append(
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": line},
-                }
-            )
-
-        category_display = state["category"].replace("_", " ").title()
-        emoji = CATEGORY_EMOJI.get(state["category"], ":grey_question:")
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"{emoji}  {category_display}"
-                            f"  •  Difficulty: {state['difficulty']}"
-                        ),
-                    }
-                ],
-            }
-        )
-
-        return blocks
-
-    def _build_public_question_blocks(self, state):
-        """Public channel message with 'Answer' button."""
-        emoji = CATEGORY_EMOJI.get(state["category"], ":grey_question:")
-        category_title = state["category"].replace("_", " ").title()
-
-        return [
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": ":trophy:  Daily Trivia",
-                    "emoji": True,
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{state['question_text']}*",
-                },
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "Answer",
-                            "emoji": True,
-                        },
-                        "action_id": "start_answer",
-                        "value": state["question_id"],
-                    }
-                ],
-            },
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"{emoji}  {category_title}"
-                            f"  •  Difficulty: {state['difficulty']}"
-                            f"  •  Click *Answer* to submit yours privately"
-                        ),
-                    }
-                ],
-            },
-        ]
