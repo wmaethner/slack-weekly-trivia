@@ -485,6 +485,35 @@ class StatsStore:
         ).fetchone()
         return row[0]
 
+    def get_active_user_count(self, days: int = 7) -> int:
+        row = self._conn.execute(
+            """
+            SELECT COUNT(DISTINCT user_id) FROM answers
+            WHERE timestamp >= date('now', '-' || ? || ' days')
+            """,
+            (str(days),),
+        ).fetchone()
+        return row[0]
+
+    def get_weekly_active_users(self, weeks: int = 12) -> list[dict]:
+        rows = self._conn.execute(
+            """
+            SELECT strftime('%Y-%W', timestamp) as week,
+                   MIN(substr(timestamp, 1, 10)) as week_start,
+                   COUNT(DISTINCT user_id) as unique_users,
+                   COUNT(*) as total
+            FROM answers
+            WHERE timestamp >= date('now', '-' || ? || ' days')
+            GROUP BY week
+            ORDER BY week ASC
+            """,
+            (str(weeks * 7),),
+        ).fetchall()
+        return [
+            {"week": r[0], "week_start": r[1], "unique_users": r[2], "total": r[3]}
+            for r in rows
+        ]
+
     # ------------------------------------------------------------------
     # Workspace config
     # ------------------------------------------------------------------

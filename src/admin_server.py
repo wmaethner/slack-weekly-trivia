@@ -11,7 +11,7 @@ from stats_store import StatsStore
 
 logger = logging.getLogger(__name__)
 
-ADMIN_HOST = os.getenv("ADMIN_HOST", "0.0.0.0")
+ADMIN_HOST = os.getenv("ADMIN_HOST", "::")
 ADMIN_PORT = int(os.getenv("ADMIN_PORT", "8080"))
 
 app = FastAPI(title="Trivia Admin")
@@ -29,6 +29,7 @@ store = StatsStore()
 async def dashboard_page(request: Request):
     overview = _get_overview()
     daily = store.get_daily_answer_counts(30)
+    weekly_active = store.get_weekly_active_users(12)
     categories = store.get_category_stats()
     difficulties = store.get_difficulty_stats()
     leaderboard = store.get_leaderboard(limit=10)
@@ -39,6 +40,7 @@ async def dashboard_page(request: Request):
     html = template.render(
         overview=overview,
         daily=daily,
+        weekly_active=weekly_active,
         categories=categories,
         difficulties=difficulties,
         leaderboard=leaderboard,
@@ -62,6 +64,11 @@ async def api_overview():
 @app.get("/admin/api/daily")
 async def api_daily(days: int = Query(30, ge=1, le=365)):
     return {"series": store.get_daily_answer_counts(days)}
+
+
+@app.get("/admin/api/weekly-active")
+async def api_weekly_active(weeks: int = Query(12, ge=1, le=52)):
+    return {"series": store.get_weekly_active_users(weeks)}
 
 
 @app.get("/admin/api/users")
@@ -109,6 +116,8 @@ def _get_overview() -> dict:
         "active_workspaces": store.get_workspace_count(),
         "answers_today": _answers_since("today"),
         "answers_this_week": _answers_since("-7 days"),
+        "weekly_active_users": store.get_active_user_count(7),
+        "monthly_active_users": store.get_active_user_count(30),
     }
 
 
@@ -127,7 +136,7 @@ def _answers_since(since: str) -> int:
 
 def run():
     logger.info(f"Admin server starting on {ADMIN_HOST}:{ADMIN_PORT}")
-    uvicorn.run(app, host="0.0.0.0", port=ADMIN_PORT, log_level="info")
+    uvicorn.run(app, host=ADMIN_HOST, port=ADMIN_PORT, log_level="info")
 
 
 def start_in_thread():

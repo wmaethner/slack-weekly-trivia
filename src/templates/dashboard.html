@@ -85,6 +85,11 @@
             <div class="sub">unique participants</div>
         </div>
         <div class="card">
+            <div class="label">Weekly Active</div>
+            <div class="value neutral">{{ overview.weekly_active_users }}</div>
+            <div class="sub">{{ overview.monthly_active_users }} in last 30 days</div>
+        </div>
+        <div class="card">
             <div class="label">Accuracy</div>
             <div class="value {% if overview.overall_accuracy >= 60 %}good{% elif overview.overall_accuracy >= 40 %}warn{% else %}red{% endif %}">
                 {{ "%.1f"|format(overview.overall_accuracy) }}%
@@ -103,6 +108,14 @@
         <h2>Daily Answers (Last 30 Days)</h2>
         <div class="chart-container">
             <canvas id="dailyChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Weekly active users chart -->
+    <div class="panel full">
+        <h2>Weekly Active Users (Last 12 Weeks)</h2>
+        <div class="chart-container">
+            <canvas id="weeklyActiveChart"></canvas>
         </div>
     </div>
 
@@ -269,6 +282,43 @@
                 x: {
                     grid: { display: false },
                     ticks: { maxTicksLimit: 15 },
+                }
+            }
+        }
+    });
+
+    // Weekly active users chart
+    var weeklyData = {{ weekly_active | tojson | safe }};
+    var weeklyCtx = document.getElementById('weeklyActiveChart').getContext('2d');
+    new Chart(weeklyCtx, {
+        type: 'line',
+        data: {
+            labels: weeklyData.map(function(w) { return w.week_start; }),
+            datasets: [{
+                label: 'Unique Users',
+                data: weeklyData.map(function(w) { return w.unique_users; }),
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245,158,11,0.08)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: {
+                legend: { position: 'top' },
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(0,0,0,0.04)' },
+                },
+                x: {
+                    grid: { display: false },
                 }
             }
         }
