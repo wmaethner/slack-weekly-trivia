@@ -138,7 +138,10 @@ class DailyTriviaScheduler:
             category_tops = self._top_per_category(self._service.get_active_categories())
             start, end = self._week_window()
             questions = self._service.get_question_extremes(start, end)
-            blocks = build_weekly_leaderboard_blocks(board, category_tops, questions)
+            streaks = self._service.get_streak_leaderboard(limit=3)
+            blocks = build_weekly_leaderboard_blocks(
+                board, category_tops, questions, streaks
+            )
             return "Weekly Leaderboard", blocks
 
         self._safe_post(channel_id, team_id, "weekly leaderboard", build)

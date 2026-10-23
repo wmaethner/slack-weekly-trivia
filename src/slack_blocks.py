@@ -320,7 +320,12 @@ def build_leaderboard_command_blocks(
 # Scheduled posts (used by scheduler.py)
 # ------------------------------------------------------------------
 
-def build_weekly_leaderboard_blocks(board: list[dict], category_tops: list[tuple], questions: list[dict]) -> list[dict]:
+def build_weekly_leaderboard_blocks(
+    board: list[dict],
+    category_tops: list[tuple],
+    questions: list[dict],
+    streaks: list[dict],
+) -> list[dict]:
     blocks = [_header(":trophy:  Weekly Leaderboard")]
 
     if not board:
@@ -340,6 +345,13 @@ def build_weekly_leaderboard_blocks(board: list[dict], category_tops: list[tuple
             emoji = CATEGORY_EMOJI.get(cat, ":grey_question:")
             cat_lines.append(f"{emoji}  {_category_display(cat)}: <@{top['user_id']}> {top['accuracy']}%")
         blocks.append(_section("*Top by Category*\n" + "\n".join(cat_lines)))
+
+    if streaks:
+        streak_lines = [
+            f"{_trophy(i)}  <@{s['user_id']}>  {s['streak']} correct in a row"
+            for i, s in enumerate(streaks)
+        ]
+        blocks.append(_section(":fire:  *Top Streaks*\n" + "\n".join(streak_lines)))
 
     extremes = build_extremes_block(questions, "*This Week's Toughest & Easiest*")
     if extremes:

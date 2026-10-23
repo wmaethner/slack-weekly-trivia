@@ -1,13 +1,17 @@
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 _DATA_DIR = os.environ.get(
     "TRIVIA_DB_DIR",
     os.path.join(os.path.dirname(__file__), "data"),
 )
 os.makedirs(_DATA_DIR, exist_ok=True)
+
+# Users with no answer in this many days are hidden from leaderboards
+# (data is kept; they reappear as soon as they answer again).
+INACTIVE_AFTER_DAYS = 14
 
 
 class StatsStore:
@@ -171,6 +175,14 @@ class StatsStore:
     # Read
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _active_user_filter() -> tuple[str, str]:
+        """SQL condition + param limiting to users who answered recently."""
+        cutoff = (
+            datetime.now(timezone.utc) - timedelta(days=INACTIVE_AFTER_DAYS)
+        ).isoformat()
+        return "user_id IN (SELECT user_id FROM answers WHERE timestamp >= ?)", cutoff
+
     def get_user_answer_count(self, user_id: str) -> int:
         row = self._conn.execute(
             "SELECT COUNT(*) FROM answers WHERE user_id = ?",
@@ -213,8 +225,9 @@ class StatsStore:
         }
 
     def get_leaderboard(self, limit=3, category=None, difficulty=None):
-        where = []
-        params = []
+        active_sql, cutoff = self._active_user_filter()
+        where = [active_sql]
+        params = [cutoff]
 
         if category:
             where.append("category = ?")
@@ -223,9 +236,7 @@ class StatsStore:
             where.append("difficulty = ?")
             params.append(difficulty)
 
-        clause = ""
-        if where:
-            clause = "WHERE " + " AND ".join(where)
+        clause = "WHERE " + " AND ".join(where)
 
         rows = self._conn.execute(
             f"""
@@ -251,8 +262,11 @@ class StatsStore:
         ]
 
     def get_streak_leaderboard(self, limit=3):
+        active_sql, cutoff = self._active_user_filter()
         rows = self._conn.execute(
-            "SELECT user_id, correct FROM answers ORDER BY user_id, timestamp DESC"
+            f"SELECT user_id, correct FROM answers WHERE {active_sql} "
+            "ORDER BY user_id, timestamp DESC",
+            (cutoff,),
         ).fetchall()
 
         streaks = {}
@@ -279,8 +293,9 @@ class StatsStore:
         ]
 
     def get_user_rank(self, user_id, category=None, difficulty=None):
-        where = []
-        params = []
+        active_sql, cutoff = self._active_user_filter()
+        where = [active_sql]
+        params = [cutoff]
 
         if category:
             where.append("category = ?")
@@ -289,9 +304,7 @@ class StatsStore:
             where.append("difficulty = ?")
             params.append(difficulty)
 
-        clause = ""
-        if where:
-            clause = "WHERE " + " AND ".join(where)
+        clause = "WHERE " + " AND ".join(where)
 
         rows = self._conn.execute(
             f"""
@@ -301,7 +314,8 @@ class StatsStore:
             GROUP BY user_id
             HAVING COUNT(*) >= 5
             ORDER BY CAST(SUM(correct) AS REAL) / COUNT(*) DESC, SUM(correct) DESC
-            """
+            """,
+            params,
         ).fetchall()
 
         total_players = len(rows)
