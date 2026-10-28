@@ -48,6 +48,10 @@ def _trophy(i: int) -> str:
     return TROPHIES[i] if i < len(TROPHIES) else f"{i + 1}."
 
 
+def _truncate(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def _find_option(options: list[dict], value: str) -> dict:
     for opt in options:
         if opt["value"] == value:
@@ -82,7 +86,8 @@ def build_question_blocks(state: dict, action_prefix: str = "trivia_answer_") ->
                         "text": {
                             "type": "plain_text",
                             "emoji": True,
-                            "text": f"{label}. {answer}",
+                            # Slack caps button text at 75 chars
+                            "text": _truncate(f"{label}. {answer}", 75),
                         },
                         "action_id": f"{action_prefix}{label.lower()}",
                         "value": value,
