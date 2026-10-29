@@ -17,6 +17,10 @@ CATEGORY_EMOJI = {
     "general_knowledge": ":brain:",
 }
 
+# Slack Block Kit limits
+BUTTON_TEXT_LIMIT = 75
+SECTION_TEXT_LIMIT = 3000
+
 TROPHIES = [
     ":first_place_medal:",
     ":second_place_medal:",
@@ -69,30 +73,40 @@ def build_question_blocks(state: dict, action_prefix: str = "trivia_answer_") ->
 
     blocks = [
         _header(f"{emoji}  {category_title}"),
-        _section(f"*{state['question_text']}*"),
+        _section(f"*{_truncate(state['question_text'], SECTION_TEXT_LIMIT - 2)}*"),
     ]
 
-    for label, answer in zip(state["labels"], state["answers"]):
+    def button(label: str, text: str) -> dict:
         value = label
         if action_prefix != "trivia_answer_":
             value = f"{label}|{state['question_id']}"
+        return {
+            "type": "button",
+            "text": {"type": "plain_text", "emoji": True, "text": text},
+            "action_id": f"{action_prefix}{label.lower()}",
+            "value": value,
+        }
 
+    full_texts = [
+        f"{label}. {answer}" for label, answer in zip(state["labels"], state["answers"])
+    ]
+
+    if all(len(t) <= BUTTON_TEXT_LIMIT for t in full_texts):
+        # Short answers: one full-text button per row
+        for label, text in zip(state["labels"], full_texts):
+            blocks.append({"type": "actions", "elements": [button(label, text)]})
+    else:
+        # A long answer would overflow a button: list answers in the message
+        # and use a single row of letter-only buttons
+        lines = [
+            f"*{label})*  {answer}"
+            for label, answer in zip(state["labels"], state["answers"])
+        ]
+        blocks.append(_section(_truncate("\n".join(lines), SECTION_TEXT_LIMIT)))
         blocks.append(
             {
                 "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "emoji": True,
-                            # Slack caps button text at 75 chars
-                            "text": _truncate(f"{label}. {answer}", 75),
-                        },
-                        "action_id": f"{action_prefix}{label.lower()}",
-                        "value": value,
-                    }
-                ],
+                "elements": [button(label, label) for label in state["labels"]],
             }
         )
 
