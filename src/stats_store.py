@@ -13,6 +13,9 @@ os.makedirs(_DATA_DIR, exist_ok=True)
 # (data is kept; they reappear as soon as they answer again).
 INACTIVE_AFTER_DAYS = 14
 
+# A single correct answer isn't a streak
+MIN_STREAK = 2
+
 
 class StatsStore:
     """SQLite-backed persistence for trivia answer stats."""
@@ -284,7 +287,7 @@ class StatsStore:
             else:
                 done.add(user_id)
 
-        result = [(uid, s) for uid, s in streaks.items() if s > 0]
+        result = [(uid, s) for uid, s in streaks.items() if s >= MIN_STREAK]
         result.sort(key=lambda x: (-x[1], x[0]))
 
         return [
